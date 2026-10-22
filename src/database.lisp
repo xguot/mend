@@ -27,6 +27,8 @@
       (when (probe-file input) (delete-file input))
       (when (probe-file output) (delete-file output)))))
 (defun initialize-database ()
+  (when (zerop (length (string-trim '(#\Space #\Tab #\Newline #\Return) *db-user*)))
+    (error "Set MEND_DB_USER to your local database username before starting Mend."))
   (unless (identifier-p *database*) (error "MEND_DB_NAME must contain only letters, digits, or underscores."))
   (db-query (format nil "CREATE DATABASE IF NOT EXISTS `~A` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" *database*) :use-database nil)
   (db-query (read-text (merge-pathnames "db/schema.sql" *root*))))

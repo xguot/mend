@@ -16,6 +16,8 @@ import urllib.request
 ROOT = Path(__file__).resolve().parent.parent
 DB = 'mend_test_' + secrets.token_hex(6)
 ENV = os.environ.copy()
+if not ENV.get('MEND_DB_USER', '').strip():
+    raise SystemExit('Set MEND_DB_USER to your local database username before running tests.')
 with socket.socket() as listener:
     listener.bind(('127.0.0.1', 0))
     PORT = listener.getsockname()[1]
@@ -127,6 +129,6 @@ finally:
     assert re.fullmatch(r'mend_test_[0-9a-f]{12}', DB)
     subprocess.run([ENV.get('MEND_MYSQL', '/Applications/XAMPP/xamppfiles/bin/mysql'),
         '--protocol=SOCKET', '--socket=' + ENV.get('MEND_DB_SOCKET', '/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock'),
-        '--user=' + ENV.get('MEND_DB_USER', 'root'), '--execute=DROP DATABASE IF EXISTS `' + DB + '`;'],
+        '--user=' + ENV['MEND_DB_USER'], '--execute=DROP DATABASE IF EXISTS `' + DB + '`;'],
         env=ENV, check=True)
     log.close()

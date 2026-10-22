@@ -7,7 +7,7 @@
 (defparameter *port* (parse-integer (env "MEND_PORT" "4242")))
 (defparameter *mysql* (env "MEND_MYSQL" "/Applications/XAMPP/xamppfiles/bin/mysql"))
 (defparameter *socket* (env "MEND_DB_SOCKET" "/Applications/XAMPP/xamppfiles/var/mysql/mysql.sock"))
-(defparameter *db-user* (env "MEND_DB_USER" "root"))
+(defparameter *db-user* (env "MEND_DB_USER" ""))
 (defparameter *runtime* (merge-pathnames ".runtime/" *root*))
 
 (defun utf8 (text) (ext:convert-string-to-bytes text charset:utf-8))
