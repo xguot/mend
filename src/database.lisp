@@ -1,0 +1,62 @@
+(in-package :mend)
+
+;; Values become UTF-8 hexadecimal SQL literals. No user text is interpolated
+;; as SQL syntax; the mysql executable is invoked directly, without a shell.
+(defun sql-text (value)
+  (let ((bytes (utf8 value)))
+    (if (zerop (length bytes)) "''"
+      (format nil "CONVERT(X'~{~2,'0X~}' USING utf8mb4)" (coerce bytes 'list)))))
+(defun unhex (text)
+  (from-utf8 (map '(vector (unsigned-byte 8)) #'identity
+    (loop for i from 0 below (length text) by 2 collect (parse-integer text :start i :end (+ i 2) :radix 16)))))
+(defun db-query (sql &key (use-database t))
+  (let* ((token (random-token)) (input (merge-pathnames (concatenate 'string token ".sql") *runtime*))
+         (output (merge-pathnames (concatenate 'string token ".out") *runtime*)))
+    (unwind-protect
+      (progn
+        (with-open-file (out input :direction :output :if-exists :error :external-format charset:utf-8)
+          (write-line "SET NAMES utf8mb4;" out) (write-string sql out))
+        (let* ((arguments (append (list "--protocol=SOCKET" (concatenate 'string "--socket=" *socket*)
+                         (concatenate 'string "--user=" *db-user*) "--default-character-set=utf8mb4"
+                         "--batch" "--raw" "--skip-column-names" "--connect-timeout=5")
+                         (when use-database (list (concatenate 'string "--database=" *database*)))))
+               (status (ext:run-program *mysql* :arguments arguments :input input :output output
+                        :if-output-exists :overwrite :wait t)))
+          (unless (null status) (error "Database operation failed. Check XAMPP MySQL and your connection settings."))
+          (remove "" (split (read-text output) #\Newline) :test #'equal)))
+      (when (probe-file input) (delete-file input))
+      (when (probe-file output) (delete-file output)))))
+(defun initialize-database ()
+  (unless (identifier-p *database*) (error "MEND_DB_NAME must contain only letters, digits, or underscores."))
+  (db-query (format nil "CREATE DATABASE IF NOT EXISTS `~A` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" *database*) :use-database nil)
+  (db-query (read-text (merge-pathnames "db/schema.sql" *root*))))
+(defun request-rows ()
+  (loop for line in (db-query "SELECT id, HEX(requested_date), HEX(room), HEX(requested_by), HEX(description), HEX(priority), HEX(status) FROM requests ORDER BY id DESC;")
+        collect (let ((parts (split line #\Tab))) (cons (first parts) (mapcar #'unhex (rest parts))))))
+(defun request-exists-p (id)
+  (not (null (db-query (format nil "SELECT id FROM requests WHERE id=~D;" id)))))
+(defun validate-request (form)
+  (let ((errors nil))
+    (flet ((bad (field message) (push (cons field message) errors)))
+      (unless (valid-date-p (field form "requested_date")) (bad "requested_date" "Enter a valid date."))
+      (dolist (spec '(("room" 40 "Enter a room or location (up to 40 characters).")
+                      ("requested_by" 100 "Enter a name (up to 100 characters).")
+                      ("description" 2000 "Describe the issue (up to 2,000 characters).")))
+        (unless (<= 1 (length (field form (first spec))) (second spec)) (bad (first spec) (third spec))))
+      (unless (member (field form "priority") '("low" "medium" "high") :test #'equal) (bad "priority" "Select a priority."))
+      (unless (member (field form "status") '("open" "in_progress" "completed") :test #'equal) (bad "status" "Select a status.")))
+    (nreverse errors)))
+(defun save-request (form &optional id)
+  (let ((date (sql-text (field form "requested_date"))) (room (sql-text (field form "room")))
+        (by (sql-text (field form "requested_by"))) (description (sql-text (field form "description")))
+        (priority (sql-text (field form "priority"))) (status (sql-text (field form "status"))))
+    (db-query (if id
+      (format nil "UPDATE requests SET requested_date=~A, room=~A, requested_by=~A, description=~A, priority=~A, status=~A WHERE id=~D;" date room by description priority status id)
+      (format nil "INSERT INTO requests (requested_date, room, requested_by, description, priority, status) VALUES (~A,~A,~A,~A,~A,~A);" date room by description priority status)))))
+(defun delete-request (id) (db-query (format nil "DELETE FROM requests WHERE id=~D;" id)))
+(defun row-json (row)
+  (apply #'json-object (loop for key in '("id" "requested_date" "room" "requested_by" "description" "priority" "status")
+                             for value in row append (list key value))))
+(defun requests-json ()
+  (format nil "{\"requests\":[~A],\"csrf\":~A,\"database\":~A}"
+    (join (mapcar #'row-json (request-rows)) ",") (json-string *csrf-token*) (json-string *database*)))

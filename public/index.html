@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Mend — a minimal maintenance request workspace.">
+  <title>Mend · Maintenance requests</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="tagbar">
+    <span class="pane-handle" aria-hidden="true"></span>
+    <a class="app-name" href="/" aria-label="Mend home">mend</a>
+    <span class="path">/requests</span>
+    <span class="tag-divider" aria-hidden="true">|</span>
+    <nav class="commands" aria-label="Request commands">
+      <button type="button" id="new-request">New request</button>
+      <button type="button" id="refresh-requests">Refresh</button>
+    </nav>
+    <span class="connection" id="connection" role="status"><span>Connecting…</span></span>
+  </header>
+
+  <main id="main">
+    <div class="page-heading">
+      <h1>Maintenance requests</h1>
+      <p id="request-summary" role="status">Loading…</p>
+    </div>
+
+    <section class="requests-panel" aria-labelledby="requests-title">
+      <div class="pane-tag">
+        <span class="pane-handle" aria-hidden="true"></span>
+        <h2 id="requests-title">requests</h2>
+        <span class="tag-divider" aria-hidden="true">|</span>
+        <div class="tabs" role="group" aria-label="Filter by status">
+          <button type="button" class="tab selected" data-status="all" aria-pressed="true">All <span id="tab-total">0</span></button>
+          <button type="button" class="tab" data-status="open" aria-pressed="false">Open</button>
+          <button type="button" class="tab" data-status="in_progress" aria-pressed="false">In progress</button>
+          <button type="button" class="tab" data-status="completed" aria-pressed="false">Completed</button>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <label class="search" for="search"><span>Find</span><input id="search" type="search" placeholder="Request, room, or person" autocomplete="off" aria-keyshortcuts="/"></label>
+        <div class="filters">
+          <label><span class="sr-only">Priority</span><select id="priority-filter"><option value="all">All priorities</option><option value="high">High priority</option><option value="medium">Medium priority</option><option value="low">Low priority</option></select></label>
+          <label><span class="sr-only">Sort requests</span><select id="sort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="priority">Priority first</option></select></label>
+          <button type="button" id="clear-filters">Reset</button>
+        </div>
+      </div>
+
+      <div id="load-error" class="load-error" role="alert" hidden>
+        <div><strong>Requests unavailable.</strong><p id="load-error-message">Check that XAMPP MySQL is running.</p></div>
+        <button type="button" class="button" id="retry">Retry</button>
+      </div>
+
+      <div class="table-scroll" role="region" aria-label="Request list" tabindex="0">
+        <table>
+          <caption class="sr-only">Maintenance requests. Edit a request to view or update its details.</caption>
+          <thead><tr><th scope="col" class="request-column">Request</th><th scope="col">Room</th><th scope="col">Requested by</th><th scope="col">Priority</th><th scope="col">Status</th><th scope="col" class="actions-heading">Actions</th></tr></thead>
+          <tbody id="requests-body"></tbody>
+        </table>
+      </div>
+
+      <div class="empty-state" id="empty-state" hidden>
+        <h3 id="empty-title">No requests.</h3>
+        <p id="empty-description">Create a request to get started.</p>
+        <button type="button" class="button" id="empty-action">New request</button>
+      </div>
+      <footer class="table-footer"><span id="results-count" role="status">Loading requests…</span><span class="keyboard-hint">/ Find</span></footer>
+    </section>
+  </main>
+
+  <dialog id="request-dialog" aria-labelledby="dialog-title">
+    <form id="request-form" novalidate>
+      <div class="dialog-header">
+        <span class="pane-handle" aria-hidden="true"></span>
+        <h2 id="dialog-title">New request</h2>
+        <span class="tag-divider" aria-hidden="true">|</span>
+        <button type="button" data-close="request-dialog" aria-label="Close form">Close</button>
+      </div>
+      <div class="dialog-body">
+        <p class="dialog-intro" id="dialog-intro">All fields are required.</p>
+        <input type="hidden" name="id" id="request-id">
+        <div class="form-grid">
+          <div class="form-field"><label for="requested-date">Requested date</label><input id="requested-date" name="requested_date" type="date" min="1900-01-01" max="9999-12-31" required aria-describedby="error-requested_date"><span class="field-error" id="error-requested_date"></span></div>
+          <div class="form-field"><label for="room">Room / location</label><input id="room" name="room" maxlength="40" placeholder="E1 · East wing" required aria-describedby="error-room"><span class="field-error" id="error-room"></span></div>
+        </div>
+        <div class="form-field"><label for="requested-by">Requested by</label><input id="requested-by" name="requested_by" maxlength="100" placeholder="Full name" required autocomplete="name" aria-describedby="error-requested_by"><span class="field-error" id="error-requested_by"></span></div>
+        <div class="form-field"><label for="description">Description</label><textarea id="description" name="description" rows="4" maxlength="2000" placeholder="Describe the issue" required aria-describedby="error-description"></textarea><div class="field-meta"><span class="field-error" id="error-description"></span><span id="character-count">0 / 2,000</span></div></div>
+        <div class="form-grid">
+          <div class="form-field"><label for="priority">Priority</label><select id="priority" name="priority" required aria-describedby="error-priority"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select><span class="field-error" id="error-priority"></span></div>
+          <div class="form-field"><label for="status">Status</label><select id="status" name="status" required aria-describedby="error-status"><option value="open">Open</option><option value="in_progress">In progress</option><option value="completed">Completed</option></select><span class="field-error" id="error-status"></span></div>
+        </div>
+        <p class="form-message" id="form-message" role="alert" hidden></p>
+      </div>
+      <div class="dialog-footer"><button type="button" id="reset-form">Clear form</button><div><button type="button" data-close="request-dialog">Cancel</button><button type="submit" class="button primary" id="save-request">Create request</button></div></div>
+    </form>
+  </dialog>
+
+  <dialog id="delete-dialog" class="delete-dialog" aria-labelledby="delete-title">
+    <form id="delete-form">
+      <div class="dialog-header"><span class="pane-handle" aria-hidden="true"></span><h2 id="delete-title">Delete request?</h2></div>
+      <div class="dialog-body"><p><strong id="delete-name"></strong></p><p>This request will be permanently removed.</p><p class="form-message" id="delete-message" role="alert" hidden></p></div>
+      <div class="dialog-footer"><button type="button" data-close="delete-dialog">Cancel</button><button class="button danger" type="submit" id="confirm-delete">Delete request</button></div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" hidden><span id="toast-message"></span><button type="button" id="close-toast" aria-label="Dismiss notification">Close</button></div>
+  <noscript><p class="noscript">Enable JavaScript to use the request board.</p></noscript>
+</body>
+</html>

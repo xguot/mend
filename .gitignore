@@ -1,0 +1,7 @@
+.runtime/
+.env
+.DS_Store
+*.fas
+*.lib
+__pycache__/
+*.pyc
